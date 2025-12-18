@@ -1,0 +1,59 @@
+// Logging configuration
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Discover log files in the .logs directory
+local.file_match "logs" {
+  path_targets = [{
+    __path__ = "/var/logs/*.log",
+    __path__ = "/var/logs/**/*.log",
+  }]
+}
+
+// Read the log files
+loki.source.file "logs" {
+  targets    = local.file_match.logs.targets
+  forward_to = [loki.process.add_labels.receiver]
+  
+  // Tail from the end of existing files
+  tail_from_end = false
+}
+
+// Add labels and process logs
+loki.process "add_labels" {
+  forward_to = [loki.write.endpoint.receiver]
+  
+  stage.static_labels {
+    values = {
+      job      = "juju-environment",
+    }
+  }
+  
+  // Extract filename as a label
+  stage.regex {
+    expression = "(?P<filename>[^/]+\\.log)$"
+    source     = "filename"
+  }
+  
+  stage.labels {
+    values = {
+      filename = "",
+    }
+  }
+  
+}
+
+// Write to Loki
+loki.write "endpoint" {
+  endpoint {
+    url = env("LOKI_URL")
+  }
+  
+  // External labels applied to all logs
+  external_labels = {
+    cluster = env("CLUSTER_NAME"),
+    env     = env("ENVIRONMENT"),
+  }
+}

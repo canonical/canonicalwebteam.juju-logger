@@ -19,7 +19,8 @@ pip install -e .
 ### Running the application
 
 ```bash
-flask --app juju-logger run
+export JUJU_DATA=~/.local/share/juju/
+flask run -p 8006
 ```
 
 The application will be available at `http://localhost:5000`.
@@ -32,5 +33,5 @@ black .
 
 ## License
 
-MIT License
+[LGPL](LICENSE)
 # canonicalwebteam.juju-logger
