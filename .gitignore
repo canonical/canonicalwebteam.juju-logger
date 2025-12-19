@@ -3,3 +3,7 @@
 __pycache__/
 instance/
 .auth/
+*.rock
+*.charm
+.env
+logs

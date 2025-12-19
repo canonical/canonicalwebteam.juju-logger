@@ -42,3 +42,11 @@ config:
       description: |
         Base64 encoded Juju models.yaml file.
         Encode with: base64 -w0 < ~/.local/share/juju/models.yaml
+    juju-model-name:
+      type: string
+      description: Name of the Juju model to collect data from.
+      default: default
+    loki-url:
+      type: string
+      description: URL of the Loki instance to send logs to.
+      default: http://cos-staging.webdesign.canonical.com/stg-webdesign-cos-lite-ps5-loki-0/loki/api/v1/push

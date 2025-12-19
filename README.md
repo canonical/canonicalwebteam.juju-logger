@@ -2,6 +2,8 @@
 
 A Juju logger application built with Flask.
 
+
+
 ## Installation
 
 ```bash

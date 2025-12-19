@@ -48,12 +48,11 @@ loki.process "add_labels" {
 // Write to Loki
 loki.write "endpoint" {
   endpoint {
-    url = env("LOKI_URL")
+    url = env("FLASK_LOKI_URL")
   }
   
   // External labels applied to all logs
   external_labels = {
-    cluster = env("CLUSTER_NAME"),
-    env     = env("ENVIRONMENT"),
+    juju_environment = env("FLASK_JUJU_MODEL_NAME"),
   }
 }

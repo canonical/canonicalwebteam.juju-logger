@@ -1,13 +1,12 @@
 name: canonicalwebteam-juju-logger
-base: "ubuntu@22.04"
-version: latest
-summary: A service to collect and log Juju model data.
+base: ubuntu@22.04
+version: "0.1"
+summary: A Flask application to log Juju model data.
 description: |
-  This package sets up a service that collects data from Juju models and logs it for analysis and monitoring purposes.
-license: LGPL-3.0
+  This charm deploys a Flask application that collects and logs data from Juju models using the Juju Python client library.
+  It connects to the Juju controller, retrieves information about the current model and applications, and logs this data for analysis and monitoring purposes.
 platforms:
   amd64:
-
 package-repositories:
   - type: apt
     url: https://apt.grafana.com
@@ -16,41 +15,22 @@ package-repositories:
       - stable
     components:
       - main
-
+extensions:
+  - flask-framework
 parts:
-  flask-app:
-    plugin: python
-    source: .
-    python-requirements:
-      - requirements.txt
-    build-packages:
-      - python3-dev
-      - python3-pip
-      - python3-venv
-    stage-packages:
-      - python3
+  flask-framework/install-app:
+    prime:
+      - flask/app/.env
+      - flask/app/app.py
+      - flask/app/src
   alloy:
     plugin: nil
     stage-packages:
       - alloy
-    after:
-      - flask-app
-
-# Services to be loaded by the Pebble entrypoint
 services:
-  flask-app:
+  alloy-worker:
     override: replace
+    command: alloy run config.alloy
     startup: enabled
-    command: flask run --host=0.0.0.0 --port=8000
-    environment:
-      TZ: UTC
-      FLASK_APP: app.py
-    on-failure: shutdown
-  alloy-service:
-    override: replace
-    startup: enabled
-    command: alloy run /etc/alloy/config.alloy
-    environment:
-      TZ: UTC
-    after:
-      - flask-app
+    user: _daemon_
+    working-dir: /flask/app
