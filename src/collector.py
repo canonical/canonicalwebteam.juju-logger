@@ -59,12 +59,10 @@ async def authenticate_juju():
     logging.info(f"Connected to controller: {controller.controller_name}")
 
 
-@scheduled_task(300)  # run every 5 minutes
 async def collect_data():
     """
     Collect data from the Juju model.
     """
-
     # Set up credentials
     await authenticate_juju()
 
@@ -75,19 +73,8 @@ async def collect_data():
     await model.connect()
 
     status = await model.get_status()
+    debug_log = await model.debug_log()
 
     #  Log to file
-    save_juju_debug_logs(status)  # type: ignore
-    save_juju_status_logs(status)
-
-    # apps = await model.applications()
-    # for app in apps:
-    #     units = await app.units()
-    #     for unit in units:
-    #         status = await unit.status()
-    #         logging.info(f"Unit {unit.name} status: {status}")
-
-
-def start_collection():
-    # Run the deploy coroutine in an asyncio event loop
-    asyncio.run(collect_data())
+    await save_juju_status_logs(model.name, status)  # type: ignore
+    await save_juju_debug_logs(model.name, debug_log)  # type: ignore

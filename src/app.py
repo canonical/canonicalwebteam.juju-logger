@@ -1,27 +1,53 @@
-from src import create_app
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi.responses import HTMLResponse
+from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from src.collector import collect_data
 from src.logger import read_juju_debug_logs, read_juju_status_logs
 
-
-app = create_app()
-
-
-@app.route("/environment/status")
-def juju_environment_status():
-    logs = read_juju_status_logs()
-    return "\n".join(logs)
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
-@app.route("/environment/debug")
-def juju_environment_debug():
-    logs = read_juju_debug_logs()
-    return "\n".join(logs)
+# Set up the scheduler
+scheduler = AsyncIOScheduler()
+scheduler.add_job(collect_data, "interval", seconds=5)
+scheduler.start()
+
+
+# Ensure the scheduler shuts down properly on application exit.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/_status/check", response_class=HTMLResponse)
+async def status():
+    return "OK"
+
+
+@app.get("/environment/debug")
+async def juju_environment_debug():
+    return read_juju_debug_logs()
+
+
+@app.get("/environment/status")
+async def juju_environment_status():
+    return read_juju_status_logs()
 
 
 @app.route("/environment/status-log")
-def juju_environment_status_log():
+async def juju_environment_status_log():
     return "Juju Environment status log for all units"
 
 
 @app.route("/environment/unit-messages")
-def juju_environment_unit_messages():
+async def juju_environment_unit_messages():
     return "Juju Environment unit messages"

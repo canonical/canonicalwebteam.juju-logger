@@ -1,29 +1,23 @@
-# This file configures Charmcraft.
-# See https://juju.is/docs/sdk/charmcraft-config for guidance.
-
 name: canonicalwebteam-juju-logger
 
 type: charm
 
-bases:
-  - build-on:
-      - name: ubuntu
-        channel: "22.04"
-    run-on:
-      - name: ubuntu
-        channel: "22.04"
+base: ubuntu@24.04
 
-# (Required)
-summary: A Flask application to log Juju model data.
+platforms:
+  ubuntu:
+    build-on: amd64
+    build-for: arm64
 
-# (Required)
+summary: A FastAPI application to log Juju model data.
+
 description: |
-  This charm deploys a Flask application that collects and logs data from Juju models using the Juju Python client library.
+  This charm deploys a FastAPI application that collects and logs data from Juju models using the Juju Python client library.
 
   It connects to the Juju controller, retrieves information about the current model and applications, and logs this data for analysis and monitoring purposes.
 
 extensions:
-  - flask-framework
+  - fastapi-framework
 
 config:
   options:

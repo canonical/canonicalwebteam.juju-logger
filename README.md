@@ -1,37 +1,26 @@
 # canonicalwebteam.juju-logger
 
-A Juju logger application built with Flask.
-
+A Juju logger application built with FastAPI.
 
 
 ## Installation
 
 ```bash
-pip install canonicalwebteam.juju-logger
-```
-
-Or install from source:
-
-```bash
-git clone https://github.com/canonical-web-and-design/canonicalwebteam.juju-logger.git
-cd canonicalwebteam.juju-logger
-pip install -e .
+pip install -r requirements.txt
 ```
 
 ### Running the application
 
 ```bash
-export JUJU_DATA=~/.local/share/juju/
-flask run -p 8006
+uvicorn app:app --reload-exclude logs --reload 
 ```
 
-The application will be available at `http://localhost:5000`.
+The application will be available at `http://localhost:8000`.
 
-### Code formatting
+## Endpoints
 
-```bash
-black .
-```
+- `GET /environment/debug` - Retrieve debug information about the Juju environment
+- `GET /environment/status` - Get the current status of the Juju environment
 
 ## License
 
