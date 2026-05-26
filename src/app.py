@@ -6,8 +6,19 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 
-from src.collector import collect_data, raw_collect
-from src.logger import read_juju_debug_logs, read_juju_status_logs
+from src.monitor import (
+    _init_db as _init_monitor_db,
+    collect_and_store_request_log,
+    get_request_logs_since,
+)
+from src.schemas import ApplicationSnapshot, Snapshot
+from src.snapshots import (
+    _init_db,
+    get_latest_debug_logs,
+    get_latest_snapshot,
+    get_latest_status,
+    store_snapshot,
+)
 from src.utils import get_flask_env
 
 logger = logging.getLogger(__name__)
@@ -16,7 +27,8 @@ logging.basicConfig(level=logging.INFO)
 
 # Set up the scheduler
 scheduler = AsyncIOScheduler()
-# scheduler.add_job(collect_data, "interval", seconds=5)
+scheduler.add_job(store_snapshot, "interval", seconds=5)
+scheduler.add_job(collect_and_store_request_log, "interval", seconds=5)
 scheduler.start()
 
 
@@ -27,7 +39,6 @@ _REQUIRED_ENV_VARS = [
 ]
 
 
-# Ensure the scheduler shuts down properly on application exit.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     missing = [v for v in _REQUIRED_ENV_VARS if not get_flask_env(v)]
@@ -35,7 +46,10 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             f"Missing required environment variable(s): {', '.join(missing)}"
         )
+    _init_db()
+    _init_monitor_db()
     yield
+    # Ensure the scheduler shuts down properly on application exit.
     scheduler.shutdown()
 
 
@@ -47,14 +61,14 @@ async def status():
     return "OK"
 
 
-@app.get("/environment/debug")
+@app.get("/environment/debug", response_model=list[str])
 async def juju_environment_debug():
-    return read_juju_debug_logs()
+    return get_latest_debug_logs()
 
 
-@app.get("/environment/status")
+@app.get("/environment/status", response_model=dict[str, ApplicationSnapshot])
 async def juju_environment_status():
-    return read_juju_status_logs()
+    return get_latest_status()
 
 
 @app.route("/environment/status-log")
@@ -67,10 +81,14 @@ async def juju_environment_unit_messages():
     return "Juju Environment unit messages"
 
 
-@app.get("/environment/raw")
+@app.get("/environment/raw", response_model=Snapshot | None)
 async def juju_environment_raw():
-    data = await raw_collect()
-    return _serialize_raw(data)
+    return get_latest_snapshot()
+
+
+@app.get("/environment/request-logs")
+async def request_logs(seconds: int = 3600):
+    return get_request_logs_since(seconds)
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -78,54 +96,9 @@ async def dashboard():
     return FileResponse(Path(__file__).parent / "templates" / "dashboard.html")
 
 
-def _serialize_raw(data: dict) -> dict:
-    model = data["model"]
-    return {
-        "model": {
-            "name": model.name,
-            "cloud": model.cloud_tag,
-            "region": model.region,
-            "version": model.version,
-            "type": model.type_,
-            "sla": model.sla,
-            "status": model.model_status.status if model.model_status else None,
-        },
-        "applications": {
-            app_name: {
-                "status": app.status.status if app.status else None,
-                "message": app.status.info if app.status else None,
-                "since": app.status.since if app.status else None,
-                "charm": app.charm,
-                "charm_channel": app.charm_channel,
-                "charm_rev": app.charm_rev,
-                "workload_version": app.workload_version,
-                "exposed": app.exposed,
-                "life": app.life,
-                "units": {
-                    unit_name: {
-                        "machine": unit.machine,
-                        "public_address": unit.public_address,
-                        "agent_status": unit.agent_status.status
-                        if unit.agent_status
-                        else None,
-                        "agent_message": unit.agent_status.info
-                        if unit.agent_status
-                        else None,
-                        "workload_status": unit.workload_status.status
-                        if unit.workload_status
-                        else None,
-                        "workload_message": unit.workload_status.info
-                        if unit.workload_status
-                        else None,
-                        "workload_version": unit.workload_version,
-                        "leader": unit.leader,
-                        "ports": list(unit.opened_ports or []),
-                    }
-                    for unit_name, unit in (app.units or {}).items()
-                },
-            }
-            for app_name, app in data["applications"].items()
-        },
-        "debug_logs": data["debug_logs"],
-        "unit_debug_logs": data["unit_debug_logs"],
-    }
+@app.get("/stats", response_class=HTMLResponse)
+async def stats():
+    monitor_url = get_flask_env("MONITOR_URL") or ""
+    html = (Path(__file__).parent / "templates" / "stats.html").read_text()
+    html = html.replace("__MONITOR_URL__", monitor_url)
+    return HTMLResponse(html)

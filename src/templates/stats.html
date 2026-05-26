@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Stats — Juju Logger</title>
+        <link
+            rel="stylesheet"
+            href="https://assets.ubuntu.com/v1/vanilla-framework-version-4.12.0.min.css"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            .summary-number {
+                font-size: 2.2rem;
+                font-weight: 300;
+                line-height: 1;
+                margin-bottom: 0.25rem;
+            }
+            .summary-number--good { color: #0e8420; }
+            .summary-number--bad  { color: #c7162b; }
+
+            .live-dot {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                vertical-align: middle;
+                margin-right: 4px;
+            }
+            .live-dot--live    { background: #0e8420; animation: livepulse 2.5s ease-in-out infinite; }
+            .live-dot--stale   { background: #f99b11; }
+            .live-dot--error   { background: #c7162b; }
+            .live-dot--loading { background: #999; }
+            @keyframes livepulse {
+                0%, 100% { opacity: 1; }
+                50%       { opacity: 0.35; }
+            }
+
+            #refresh-progress     { height: 2px; background: #e5e5e5; }
+            #refresh-progress-bar { height: 100%; width: 0%; background: #0066cc; transition: width 0.25s linear; }
+
+            #empty-state { display: none; }
+
+            .chart-wrap { position: relative; }
+
+            @media (max-width: 620px) {
+                .summary-number { font-size: 1.6rem; }
+            }
+        </style>
+    </head>
+    <body>
+        <header class="p-navigation">
+            <div class="p-navigation__row--full-width">
+                <div class="p-navigation__banner">
+                    <div class="p-navigation__logo">
+                        <a class="p-navigation__link" href="/dashboard">
+                            <strong>Juju Logger</strong>
+                        </a>
+                    </div>
+                </div>
+                <nav class="p-navigation__nav" aria-label="Main navigation">
+                    <ul class="p-navigation__items">
+                        <li class="p-navigation__item">
+                            <a class="p-navigation__link" href="/dashboard">Dashboard</a>
+                        </li>
+                        <li class="p-navigation__item">
+                            <span class="p-navigation__link" style="font-weight: bold">Stats</span>
+                        </li>
+                    </ul>
+                    <ul
+                        class="p-navigation__items"
+                        style="display: flex; align-items: center; gap: 1.25rem; padding-right: 1rem;"
+                    >
+                        <li class="p-navigation__item" style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span class="live-dot live-dot--loading" id="live-dot"></span>
+                            <span style="font-size: 0.8rem; color: #ccc" id="last-updated"></span>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            <div id="refresh-progress">
+                <div id="refresh-progress-bar"></div>
+            </div>
+        </header>
+
+        <main class="l-main">
+            <section class="p-strip--light u-no-padding--bottom">
+                <div class="row">
+                    <div class="col-8">
+                        <h1 class="p-heading--3" style="margin-bottom: 0.25rem">
+                            Request Stats
+                        </h1>
+                        <p class="u-text--muted" id="monitor-url-label" style="margin-bottom: 0.5rem"></p>
+                    </div>
+                    <div class="col-4 u-align--right" style="display: flex; align-items: center; justify-content: flex-end;">
+                        <label for="time-range" style="margin-right: 0.5rem; white-space: nowrap; font-size: 0.9rem;">Time range</label>
+                        <select id="time-range" class="u-no-margin--bottom" onchange="onRangeChange()">
+                            <option value="5">5s</option>
+                            <option value="30">30s</option>
+                            <option value="60">1m</option>
+                            <option value="300">5m</option>
+                            <option value="1800">30m</option>
+                            <option value="3600" selected>1h</option>
+                            <option value="10800">3h</option>
+                            <option value="21600">6h</option>
+                            <option value="43200">12h</option>
+                            <option value="86400">24h</option>
+                            <option value="259200">3d</option>
+                            <option value="604800">7d</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Summary cards -->
+            <section class="p-strip--light u-no-padding--top u-no-padding--bottom">
+                <div class="row">
+                    <div class="col-3 col-medium-3 col-small-2">
+                        <div class="p-card u-align--center u-no-margin--bottom">
+                            <p class="summary-number" id="stat-total">—</p>
+                            <p class="u-text--muted u-no-margin--bottom" style="font-size: 0.85rem">Requests</p>
+                        </div>
+                    </div>
+                    <div class="col-3 col-medium-3 col-small-2">
+                        <div class="p-card u-align--center u-no-margin--bottom">
+                            <p class="summary-number summary-number--good" id="stat-success-rate">—</p>
+                            <p class="u-text--muted u-no-margin--bottom" style="font-size: 0.85rem">Success rate</p>
+                        </div>
+                    </div>
+                    <div class="col-3 col-medium-3 col-small-2">
+                        <div class="p-card u-align--center u-no-margin--bottom">
+                            <p class="summary-number" id="stat-avg-ms">—</p>
+                            <p class="u-text--muted u-no-margin--bottom" style="font-size: 0.85rem">Avg response (ms)</p>
+                        </div>
+                    </div>
+                    <div class="col-3 col-medium-3 col-small-2">
+                        <div class="p-card u-align--center u-no-margin--bottom">
+                            <p class="summary-number summary-number--bad" id="stat-errors">—</p>
+                            <p class="u-text--muted u-no-margin--bottom" style="font-size: 0.85rem">Errors</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Empty state -->
+            <section id="empty-state" class="p-strip">
+                <div class="row">
+                    <div class="col-12 u-align--center">
+                        <div class="p-notification--information" style="display: inline-block; text-align: left; max-width: 36rem;">
+                            <div class="p-notification__content">
+                                <h5 class="p-notification__title">No data for this time range</h5>
+                                <p class="p-notification__message">
+                                    Make sure <code>MONITOR_URL</code> and <code>MONITOR_RESOLVER_IP</code>
+                                    are set and the monitor has collected at least one request.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts -->
+            <section id="charts-section" class="p-strip">
+                <div class="row">
+                    <div class="col-12">
+                        <h3 class="p-heading--4">Response time (ms)</h3>
+                    </div>
+                </div>
+                <div style="padding: 0 1rem 0; height: 280px;">
+                    <canvas id="chart-timings" aria-label="Response time over time"></canvas>
+                </div>
+                <div class="row" style="margin-top: 2rem;">
+                    <div class="col-5 col-medium-6 col-small-4">
+                        <h3 class="p-heading--4">HTTP status distribution</h3>
+                        <div class="chart-wrap" style="max-width: 320px; margin: 0 auto;">
+                            <canvas id="chart-status" aria-label="HTTP status distribution"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-7 col-medium-6 col-small-4">
+                        <h3 class="p-heading--4">Recent errors</h3>
+                        <div style="overflow-x: auto;">
+                            <table class="p-table--mobile-card" id="errors-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th>Total (ms)</th>
+                                        <th>Error</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="errors-tbody">
+                                    <tr><td colspan="4" class="u-align--center u-text--muted">No errors</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <script>
+            const MONITOR_URL = "__MONITOR_URL__";
+            const REFRESH_MS = 10_000;
+
+            const SERIES_COLORS = {
+                time_total:         { border: "#0066cc", background: "rgba(0,102,204,0.1)" },
+                time_starttransfer: { border: "#0e8420", background: "rgba(14,132,32,0.08)" },
+                time_connect:       { border: "#f99b11", background: "rgba(249,155,17,0.08)" },
+            };
+
+            const STATUS_COLORS = ["#0066cc","#0e8420","#f99b11","#c7162b","#ae0f0a","#888","#333"];
+
+            let _timingsChart = null;
+            let _statusChart  = null;
+            let _refreshTimer = null;
+            let _progressTimer = null;
+            let _progressStart = null;
+            let _isEmpty = null;
+
+            document.getElementById("monitor-url-label").textContent = MONITOR_URL
+                ? `Monitoring: ${MONITOR_URL}`
+                : "No MONITOR_URL configured";
+
+            function escHtml(str) {
+                if (str == null) return "";
+                return String(str)
+                    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            }
+
+            function fmtTime(iso) { return new Date(iso).toLocaleTimeString(); }
+            function fmtMs(sec)   { return sec == null ? "—" : (sec * 1000).toFixed(0); }
+
+            function _setDot(state) {
+                document.getElementById("live-dot").className = `live-dot live-dot--${state}`;
+            }
+
+            function _startProgress() {
+                const bar = document.getElementById("refresh-progress-bar");
+                if (_progressTimer) clearInterval(_progressTimer);
+                _progressStart = Date.now();
+                bar.style.width = "0%";
+                _progressTimer = setInterval(() => {
+                    const pct = Math.min(100, ((Date.now() - _progressStart) / REFRESH_MS) * 100);
+                    bar.style.width = `${pct}%`;
+                    if (pct >= 100) clearInterval(_progressTimer);
+                }, 250);
+            }
+
+            function _scheduleNext() {
+                if (_refreshTimer) clearTimeout(_refreshTimer);
+                _startProgress();
+                _refreshTimer = setTimeout(loadStats, REFRESH_MS);
+            }
+
+            function onRangeChange() {
+                if (_refreshTimer) clearTimeout(_refreshTimer);
+                if (_progressTimer) clearInterval(_progressTimer);
+                _isEmpty = null;
+                loadStats();
+            }
+
+            // ── Component updaters ─────────────────────────────────────────────────────
+
+            function updateStatCards(rows) {
+                const total = rows.length;
+                const successes = rows.filter(r => r.http_status >= 200 && r.http_status < 300).length;
+                const errors = rows.filter(r => r.exit_code !== 0 || (r.http_status != null && r.http_status >= 400)).length;
+                const timings = rows.map(r => r.time_total).filter(v => v != null);
+                const avgMs = timings.length
+                    ? Math.round(timings.reduce((a, b) => a + b, 0) / timings.length * 1000)
+                    : null;
+                document.getElementById("stat-total").textContent = total;
+                document.getElementById("stat-success-rate").textContent = total ? `${Math.round(successes / total * 100)}%` : "—";
+                document.getElementById("stat-avg-ms").textContent = avgMs != null ? avgMs : "—";
+                document.getElementById("stat-errors").textContent = errors;
+            }
+
+            function updateTimingsChart(rows) {
+                const labels = rows.map(r => fmtTime(r.collected_at));
+                const keys = ["time_total", "time_starttransfer", "time_connect"];
+                const dsLabels = ["Total", "TTFB", "Connect"];
+                const newData = keys.map(k => rows.map(r => r[k] != null ? +(r[k] * 1000).toFixed(1) : null));
+                const ptRadius = rows.length > 120 ? 0 : 2;
+
+                if (!_timingsChart) {
+                    _timingsChart = new Chart(
+                        document.getElementById("chart-timings").getContext("2d"),
+                        {
+                            type: "line",
+                            data: {
+                                labels,
+                                datasets: keys.map((k, i) => ({
+                                    label: dsLabels[i],
+                                    data: newData[i],
+                                    borderColor: SERIES_COLORS[k].border,
+                                    backgroundColor: SERIES_COLORS[k].background,
+                                    borderWidth: i === 0 ? 2 : 1.5,
+                                    borderDash: i === 0 ? [] : [4, 3],
+                                    pointRadius: ptRadius,
+                                    spanGaps: true,
+                                    fill: i === 0,
+                                    tension: 0.2,
+                                })),
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: { mode: "index", intersect: false },
+                                plugins: {
+                                    legend: { position: "bottom" },
+                                    tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y + " ms" : "—"}` } },
+                                },
+                                scales: {
+                                    x: { ticks: { maxTicksLimit: 10, font: { size: 11 } } },
+                                    y: { title: { display: true, text: "ms" }, beginAtZero: true },
+                                },
+                            },
+                        }
+                    );
+                } else {
+                    _timingsChart.data.labels = labels;
+                    _timingsChart.data.datasets.forEach((ds, i) => {
+                        ds.data = newData[i];
+                        ds.pointRadius = ptRadius;
+                    });
+                    _timingsChart.update("none");
+                }
+            }
+
+            function updateStatusChart(rows) {
+                const counts = {};
+                rows.forEach(r => {
+                    const key = r.http_status ? String(r.http_status) : "Error";
+                    counts[key] = (counts[key] || 0) + 1;
+                });
+                const labels = Object.keys(counts);
+                const values = labels.map(l => counts[l]);
+                const colors = labels.map((_, i) => STATUS_COLORS[i % STATUS_COLORS.length]);
+
+                if (!_statusChart) {
+                    _statusChart = new Chart(
+                        document.getElementById("chart-status").getContext("2d"),
+                        {
+                            type: "doughnut",
+                            data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: "#fff", borderWidth: 2 }] },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: { position: "bottom", labels: { padding: 14, font: { size: 12 } } },
+                                    tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } },
+                                },
+                                cutout: "55%",
+                            },
+                        }
+                    );
+                } else {
+                    _statusChart.data.labels = labels;
+                    _statusChart.data.datasets[0].data = values;
+                    _statusChart.data.datasets[0].backgroundColor = colors;
+                    _statusChart.update("none");
+                }
+            }
+
+            function updateErrorsTable(rows) {
+                const errorRows = rows
+                    .filter(r => r.exit_code !== 0 || (r.http_status != null && r.http_status >= 400))
+                    .slice(-10).reverse();
+                document.getElementById("errors-tbody").innerHTML = errorRows.length
+                    ? errorRows.map(r => `<tr>
+                        <td data-heading="Time">${escHtml(fmtTime(r.collected_at))}</td>
+                        <td data-heading="Status">${escHtml(r.http_status ?? "—")}</td>
+                        <td data-heading="Total (ms)">${escHtml(fmtMs(r.time_total))}</td>
+                        <td data-heading="Error"><small class="u-text--muted">${escHtml(r.error || "—")}</small></td>
+                      </tr>`).join("")
+                    : '<tr><td colspan="4" class="u-align--center u-text--muted">No errors</td></tr>';
+            }
+
+            // ── Main fetch ─────────────────────────────────────────────────────────────
+
+            async function loadStats() {
+                const seconds = Number(document.getElementById("time-range").value);
+                _setDot("loading");
+                try {
+                    const res = await fetch(`/environment/request-logs?seconds=${seconds}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const rows = await res.json();
+
+                    updateStatCards(rows);
+
+                    const empty = rows.length === 0;
+                    if (_isEmpty !== empty) {
+                        document.getElementById("empty-state").style.display = empty ? "block" : "none";
+                        document.getElementById("charts-section").style.display = empty ? "none" : "block";
+                        _isEmpty = empty;
+                    }
+
+                    if (!empty) {
+                        updateTimingsChart(rows);
+                        updateStatusChart(rows);
+                        updateErrorsTable(rows);
+                    }
+
+                    _setDot("live");
+                    document.getElementById("last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                } catch (err) {
+                    _setDot("error");
+                    document.getElementById("last-updated").textContent = `Error: ${err.message}`;
+                } finally {
+                    _scheduleNext();
+                }
+            }
+
+            document.addEventListener("visibilitychange", () => {
+                if (!document.hidden) loadStats();
+            });
+
+            document.getElementById("charts-section").style.display = "none";
+
+            loadStats();
+        </script>
+    </body>
+</html>
