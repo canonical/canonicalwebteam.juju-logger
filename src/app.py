@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi import FastAPI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.collector import collect_data
+from src.collector_binary import collect_data
 from src.logger import read_juju_debug_logs, read_juju_status_logs
 
 logger = logging.getLogger(__name__)
