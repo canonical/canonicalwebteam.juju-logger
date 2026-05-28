@@ -1,0 +1,46 @@
+name: canonicalwebteam-juju-logger
+
+type: charm
+
+base: ubuntu@24.04
+
+platforms:
+  ubuntu:
+    build-on: amd64
+    build-for: arm64
+
+summary: A FastAPI application to log Juju model data.
+
+description: |
+  This charm deploys a FastAPI application that collects and logs data from Juju models using the Juju Python client library.
+
+  It connects to the Juju controller, retrieves information about the current model and applications, and logs this data for analysis and monitoring purposes.
+
+extensions:
+  - fastapi-framework
+
+config:
+  options:
+    juju-controllers-base64:
+      type: secret
+      description: |
+        Base64 encoded Juju controllers.yaml file.
+        Encode with: base64 -w0 < ~/.local/share/juju/controllers.yaml
+    juju-accounts-base64:
+      type: secret
+      description: |
+        Base64 encoded Juju accounts.yaml file.
+        Encode with: base64 -w0 < ~/.local/share/juju/accounts.yaml
+    juju-models-base64:
+      type: secret
+      description: |
+        Base64 encoded Juju models.yaml file.
+        Encode with: base64 -w0 < ~/.local/share/juju/models.yaml
+    juju-model-name:
+      type: string
+      description: Name of the Juju model to collect data from.
+      default: default
+    loki-url:
+      type: string
+      description: URL of the Loki instance to send logs to.
+      default: http://cos-staging.webdesign.canonical.com/stg-webdesign-cos-lite-ps5-loki-0/loki/api/v1/push

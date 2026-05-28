@@ -1,0 +1,10 @@
+.venv
+.mypy_cache
+__pycache__/
+instance/
+.auth/
+*.rock
+*.charm
+.env
+logs
+.vscode
