@@ -19,6 +19,13 @@ description: |
 extensions:
   - fastapi-framework
 
+parts:
+  charm:
+    plugin: charm
+    stage-packages:
+      - juju
+      - curl
+
 config:
   options:
     juju-controllers-base64:

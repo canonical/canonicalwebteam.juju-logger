@@ -27,6 +27,11 @@ parts:
     plugin: nil
     stage-packages:
       - alloy
+  juju-client:
+    plugin: nil
+    stage-packages:
+      - juju
+      - curl
 services:
   alloy-worker:
     override: replace
