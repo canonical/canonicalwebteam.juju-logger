@@ -18,7 +18,7 @@ RETENTION_DAYS = 7
 if os.getenv("DEBUG_MODE"):
     _DB_PATH = Path("./juju-logger.db")
 else:
-    _DB_PATH = Path("/var/logs/juju-logger/juju-logger.db")
+    _DB_PATH = Path("./var/logs/juju-logger/juju-logger.db")
 
 
 def _db_path() -> Path:

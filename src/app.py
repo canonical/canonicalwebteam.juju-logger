@@ -6,12 +6,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 
+from src.collector_binary import get_juju_debug_log, get_juju_status, get_model_name
 from src.monitor import (
     _init_db as _init_monitor_db,
+)
+from src.monitor import (
     collect_and_store_request_log,
     get_request_logs_since,
 )
-from src.schemas import ApplicationSnapshot, Snapshot
+from src.schemas import ApplicationSnapshot, BinaryLogEntry, BinaryModelStatus, Snapshot
 from src.snapshots import (
     _init_db,
     get_latest_debug_logs,
@@ -43,9 +46,7 @@ _REQUIRED_ENV_VARS = [
 async def lifespan(app: FastAPI):
     missing = [v for v in _REQUIRED_ENV_VARS if not get_flask_env(v)]
     if missing:
-        raise RuntimeError(
-            f"Missing required environment variable(s): {', '.join(missing)}"
-        )
+        logger.error(f"Missing required environment variable(s): {', '.join(missing)}")
     _init_db()
     _init_monitor_db()
     yield
@@ -102,3 +103,18 @@ async def stats():
     html = (Path(__file__).parent / "templates" / "stats.html").read_text()
     html = html.replace("__MONITOR_URL__", monitor_url)
     return HTMLResponse(html)
+
+
+@app.get("/binary/model")
+async def binary_model():
+    return {"model": get_model_name()}
+
+
+@app.get("/binary/status", response_model=BinaryModelStatus)
+async def binary_status():
+    return get_juju_status()
+
+
+@app.get("/binary/debug", response_model=list[BinaryLogEntry])
+async def binary_debug(limit: int = 100):
+    return get_juju_debug_log(limit)

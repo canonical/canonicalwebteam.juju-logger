@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Generator
 
-from src.collector import raw_collect
+from src.collector_binary import get_juju_status
 from src.schemas import ApplicationSnapshot, Snapshot
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ RETENTION_DAYS = 7
 if os.getenv("DEBUG_MODE"):
     _DB_PATH = Path("./juju-logger.db")
 else:
-    _DB_PATH = Path("/var/logs/juju-logger/juju-logger.db")
+    _DB_PATH = Path("./var/logs/juju-logger/juju-logger.db")
 
 
 def _db_path() -> Path:
@@ -124,19 +124,18 @@ async def store_snapshot() -> None:
     retained for RETENTION_DAYS.
     """
     try:
-        data = await raw_collect()
+        data = get_juju_status()
     except Exception:
         logger.exception("Failed to collect Juju data; snapshot skipped")
         return
 
-    serialized = _serialize_raw(data)
     collected_at = datetime.now(timezone.utc).isoformat()
-    model_name = serialized["model"].get("name") or ""
+    model_name = data.model.name or ""
 
     with _conn() as conn:
         conn.execute(
             "INSERT INTO snapshots (collected_at, model_name, data) VALUES (?, ?, ?)",
-            (collected_at, model_name, json.dumps(serialized, default=str)),
+            (collected_at, model_name, data.model_dump_json()),
         )
         cutoff = (
             datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
